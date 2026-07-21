@@ -24,13 +24,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	glbv1alpha1 "github.com/ItsThatDude/k8s-glb-operator/api/v1alpha1"
+	glbv1alpha1 "github.com/itsthatdude/k8s-glb-operator/api/v1alpha1"
 )
+
+type DeploymentImages struct {
+	Agent         string
+	WaitForConfig string
+	HAProxy       string
+}
 
 // GlobalLoadBalancerReconciler reconciles a GlobalLoadBalancer object
 type GlobalLoadBalancerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	images DeploymentImages
 }
 
 // +kubebuilder:rbac:groups=glb.antware.xyz,namespace=k8s-glb-operator-system,resources=globalloadbalancers,verbs=get;list;watch;create;update;patch;delete

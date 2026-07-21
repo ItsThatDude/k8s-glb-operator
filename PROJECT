@@ -12,7 +12,7 @@ plugins:
     manifests: dist/install.yaml
     output: dist
 projectName: k8s-glb-operator
-repo: github.com/ItsThatDude/k8s-glb-operator
+repo: github.com/itsthatdude/k8s-glb-operator
 resources:
 - api:
     crdVersion: v1
@@ -21,7 +21,7 @@ resources:
   domain: antware.xyz
   group: glb
   kind: GlobalLoadBalancer
-  path: github.com/ItsThatDude/k8s-glb-operator/api/v1alpha1
+  path: github.com/itsthatdude/k8s-glb-operator/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -29,6 +29,6 @@ resources:
   domain: antware.xyz
   group: glb
   kind: Peer
-  path: github.com/ItsThatDude/k8s-glb-operator/api/v1alpha1
+  path: github.com/itsthatdude/k8s-glb-operator/api/v1alpha1
   version: v1alpha1
 version: "3"

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ItsThatDude/k8s-glb-operator/api/v1alpha1"
-	"github.com/ItsThatDude/k8s-glb-operator/version"
+	"github.com/itsthatdude/k8s-glb-operator/api/v1alpha1"
+	"github.com/itsthatdude/k8s-glb-operator/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -19,6 +19,12 @@ const (
 	componentLabel = "app.kubernetes.io/component"
 	nameLabel      = "app.kubernetes.io/name"
 	versionLabel   = "app.kubernetes.io/version"
+
+	haproxyRunPath       = "/var/run/haproxy"
+	haproxyRunVolumeName = "haproxy-run"
+
+	haproxyConfigPath       = "/etc/haproxy"
+	haproxyConfigVolumeName = "haproxy-config"
 )
 
 var haproxyLabels = map[string]string{
@@ -68,32 +74,32 @@ func (r *GlobalLoadBalancerReconciler) EnsureHAProxyStatefulSet(ctx context.Cont
 				},
 				InitContainers: []corev1.Container{
 					{
-						Name:    "config-gen",
-						Image:   r.images.ConfigGenerator,
-						Command: []string{"/usr/local/bin/config-gen"},
+						Name:    "agent",
+						Image:   r.images.Agent,
+						Command: []string{"/usr/local/bin/agent"},
 						Args: func() []string {
 							args := []string{
-								"--name", cluster.Name,
+								"--clusterName", cluster.Name,
 							}
 							return args
 						}(),
 						RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 						VolumeMounts: []corev1.VolumeMount{
 							{
-								Name:      "haproxy-config",
-								MountPath: "/etc/haproxy",
+								Name:      haproxyConfigVolumeName,
+								MountPath: haproxyConfigPath,
 								ReadOnly:  false,
 							},
 						},
 					},
 					{
 						Name:    "wait-for-config",
-						Image:   r.images.ConfigGenerator,
+						Image:   r.images.WaitForConfig,
 						Command: []string{"/usr/local/bin/wait-for-config.sh"},
 						VolumeMounts: []corev1.VolumeMount{
 							{
-								Name:      "haproxy-config",
-								MountPath: "/etc/haproxy",
+								Name:      haproxyConfigVolumeName,
+								MountPath: haproxyConfigPath,
 								ReadOnly:  true,
 							},
 						},
@@ -118,13 +124,13 @@ func (r *GlobalLoadBalancerReconciler) EnsureHAProxyStatefulSet(ctx context.Cont
 						}(),
 						VolumeMounts: []corev1.VolumeMount{
 							{
-								Name:      "haproxy-config",
-								MountPath: "/etc/haproxy",
+								Name:      haproxyConfigVolumeName,
+								MountPath: haproxyConfigPath,
 								ReadOnly:  true,
 							},
 							{
-								Name:      "haproxy-run",
-								MountPath: "/var/run/haproxy",
+								Name:      haproxyRunVolumeName,
+								MountPath: haproxyRunPath,
 								ReadOnly:  false,
 							},
 						},
@@ -132,7 +138,7 @@ func (r *GlobalLoadBalancerReconciler) EnsureHAProxyStatefulSet(ctx context.Cont
 				},
 				Volumes: []corev1.Volume{
 					{
-						Name: "haproxy-config",
+						Name: haproxyConfigVolumeName,
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								SizeLimit: &configVolSize,
@@ -140,7 +146,7 @@ func (r *GlobalLoadBalancerReconciler) EnsureHAProxyStatefulSet(ctx context.Cont
 						},
 					},
 					{
-						Name: "haproxy-run",
+						Name: haproxyRunVolumeName,
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								SizeLimit: &runVolSize,

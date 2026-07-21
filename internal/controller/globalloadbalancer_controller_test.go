@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	glbv1alpha1 "github.com/ItsThatDude/k8s-glb-operator/api/v1alpha1"
+	glbv1alpha1 "github.com/itsthatdude/k8s-glb-operator/api/v1alpha1"
 )
 
 var _ = Describe("GlobalLoadBalancer Controller", func() {

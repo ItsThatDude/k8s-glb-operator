@@ -33,7 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	glbv1alpha1 "github.com/ItsThatDude/k8s-glb-operator/api/v1alpha1"
+	glbv1alpha1 "github.com/itsthatdude/k8s-glb-operator/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

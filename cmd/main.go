@@ -38,8 +38,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	glbv1alpha1 "github.com/ItsThatDude/k8s-glb-operator/api/v1alpha1"
-	"github.com/ItsThatDude/k8s-glb-operator/internal/controller"
+	glbv1alpha1 "github.com/itsthatdude/k8s-glb-operator/api/v1alpha1"
+	"github.com/itsthatdude/k8s-glb-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -223,13 +223,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.ClusterReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "cluster")
-		os.Exit(1)
-	}
 	if err := (&controller.GlobalLoadBalancerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
