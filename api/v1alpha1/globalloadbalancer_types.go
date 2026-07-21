@@ -26,12 +26,12 @@ import (
 
 // GlobalLoadBalancerSpec defines the desired state of GlobalLoadBalancer
 type GlobalLoadBalancerSpec struct {
-	// +required
+	// +optional
 	// +kubebuilder:default=1
-	Replicas *string `json:"replicas"`
+	Replicas int `json:"replicas,omitempty"`
 
 	// +optional
-	Peers *PeersSpec `json:"peers"`
+	Peers *PeersSpec `json:"peers,omitempty"`
 }
 
 type PeersSpec struct {

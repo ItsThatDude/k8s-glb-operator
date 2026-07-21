@@ -54,6 +54,9 @@ var _ = Describe("GlobalLoadBalancer Controller", func() {
 						Name:      resourceName,
 						Namespace: resourceNamespace,
 					},
+					Spec: glbv1alpha1.GlobalLoadBalancerSpec{
+						Replicas: 1,
+					},
 					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
