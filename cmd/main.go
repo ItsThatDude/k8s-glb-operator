@@ -40,6 +40,7 @@ import (
 
 	glbv1alpha1 "github.com/itsthatdude/k8s-glb-operator/api/v1alpha1"
 	"github.com/itsthatdude/k8s-glb-operator/internal/controller"
+	"github.com/itsthatdude/k8s-glb-operator/internal/watchers"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -220,6 +221,18 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOptions)
 	if err != nil {
 		setupLog.Error(err, "Failed to start manager")
+		os.Exit(1)
+	}
+
+	peerServiceWatcher, err := watchers.NewPeerServiceWatcher(mgr, "glb.antware.xyz/peer-name")
+
+	if err != nil {
+		setupLog.Error(err, "unable to create the peer service watcher")
+		os.Exit(1)
+	}
+
+	if err := peerServiceWatcher.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to setup the peer service watcher")
 		os.Exit(1)
 	}
 
