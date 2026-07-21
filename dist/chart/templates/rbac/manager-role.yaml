@@ -1,0 +1,32 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "k8s-glb-operator.resourceName" (dict "suffix" "manager-role" "context" $) }}
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups:
+  - glb.antware.xyz
+  resources:
+  - clusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - glb.antware.xyz
+  resources:
+  - clusters/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - glb.antware.xyz
+  resources:
+  - clusters/status
+  verbs:
+  - get
+  - patch
+  - update

@@ -1,0 +1,6 @@
+## Append samples of your project ##
+resources:
+- glb_v1alpha1_cluster.yaml
+- glb_v1alpha1_globalloadbalancer.yaml
+- glb_v1alpha1_peer.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

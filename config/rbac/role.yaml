@@ -1,0 +1,33 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: manager-role
+  namespace: k8s-glb-operator-system
+rules:
+- apiGroups:
+  - glb.antware.xyz
+  resources:
+  - globalloadbalancers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - glb.antware.xyz
+  resources:
+  - globalloadbalancers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - glb.antware.xyz
+  resources:
+  - globalloadbalancers/status
+  verbs:
+  - get
+  - patch
+  - update
