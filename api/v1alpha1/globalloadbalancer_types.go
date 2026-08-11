@@ -24,14 +24,29 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type LoadBalancerReference struct {
+	// +required
+	Name string `json:"name"`
+
+	// +required
+	Namespace string `json:"namespace"`
+}
+
 // GlobalLoadBalancerSpec defines the desired state of GlobalLoadBalancer
 type GlobalLoadBalancerSpec struct {
 	// +optional
 	// +kubebuilder:default=1
-	Replicas int `json:"replicas,omitempty"`
+	Replicas int32 `json:"replicas,omitempty"`
+
+	// +optional
+	// +kubebuilder:default="haproxy:latest"
+	Image string `json:"image,omitempty"`
 
 	// +optional
 	Peers *PeersSpec `json:"peers,omitempty"`
+
+	// +optional
+	FrontendSelector metav1.LabelSelector `json:"frontendSelector,omitempty"`
 }
 
 type PeersSpec struct {
@@ -61,6 +76,14 @@ type GlobalLoadBalancerStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+type GlobalLoadBalancerFrontendStatus struct {
+	// +required
+	Name string `json:"name"`
+
+	// + required
+	InternalPort int32 `json:"internalPort"`
 }
 
 // +kubebuilder:object:root=true

@@ -17,6 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
+// +kubebuilder:rbac:groups=core,namespace=k8s-glb-operator-system,resources=services,verbs=get;list;watch
+
 type PeerServiceWatcher struct {
 	mgr manager.Manager
 	log logr.Logger

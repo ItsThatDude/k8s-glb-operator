@@ -6,8 +6,70 @@ metadata:
   namespace: k8s-glb-operator-system
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - services/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - discovery
+  resources:
+  - endpointslices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - discovery
+  resources:
+  - endpointslices/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - discovery
+  resources:
+  - endpointslices/restricted
+  verbs:
+  - create
+  - delete
+  - patch
+  - update
+- apiGroups:
+  - discovery
+  resources:
+  - endpointslices/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - glb.antware.xyz
   resources:
+  - frontends
   - globalloadbalancers
   verbs:
   - create
@@ -20,12 +82,14 @@ rules:
 - apiGroups:
   - glb.antware.xyz
   resources:
+  - frontends/finalizers
   - globalloadbalancers/finalizers
   verbs:
   - update
 - apiGroups:
   - glb.antware.xyz
   resources:
+  - frontends/status
   - globalloadbalancers/status
   verbs:
   - get

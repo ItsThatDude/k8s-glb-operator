@@ -16,10 +16,11 @@ manager:
   replicas: 1
 
   image:
-    repository: controller
+    repository: itsthatdood/k8s-glb-operator
     ## Image tag (defaults to Chart.appVersion if not set)
     ##
     # tag: ""
+    tag: latest
     pullPolicy: IfNotPresent
 
   ## Arguments

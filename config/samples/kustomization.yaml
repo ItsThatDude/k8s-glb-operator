@@ -3,4 +3,6 @@ resources:
 - glb_v1alpha1_cluster.yaml
 - glb_v1alpha1_globalloadbalancer.yaml
 - glb_v1alpha1_peer.yaml
+- glb_v1alpha1_frontend.yaml
+- glb_v1alpha1_backend.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

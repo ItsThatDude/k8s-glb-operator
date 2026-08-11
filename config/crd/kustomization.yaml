@@ -5,6 +5,8 @@ resources:
 - bases/glb.antware.xyz_clusters.yaml
 - bases/glb.antware.xyz_globalloadbalancers.yaml
 - bases/glb.antware.xyz_peers.yaml
+- bases/glb.antware.xyz_frontends.yaml
+- bases/glb.antware.xyz_backends.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

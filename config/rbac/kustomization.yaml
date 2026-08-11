@@ -22,6 +22,12 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the k8s-glb-operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- backend_admin_role.yaml
+- backend_editor_role.yaml
+- backend_viewer_role.yaml
+- frontend_admin_role.yaml
+- frontend_editor_role.yaml
+- frontend_viewer_role.yaml
 - peer_admin_role.yaml
 - peer_editor_role.yaml
 - peer_viewer_role.yaml

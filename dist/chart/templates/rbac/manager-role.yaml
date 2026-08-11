@@ -5,9 +5,17 @@ metadata:
   namespace: {{ .Release.Namespace }}
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - glb.antware.xyz
   resources:
-  - clusters
+  - globalloadbalancers
   verbs:
   - create
   - delete
@@ -19,13 +27,13 @@ rules:
 - apiGroups:
   - glb.antware.xyz
   resources:
-  - clusters/finalizers
+  - globalloadbalancers/finalizers
   verbs:
   - update
 - apiGroups:
   - glb.antware.xyz
   resources:
-  - clusters/status
+  - globalloadbalancers/status
   verbs:
   - get
   - patch

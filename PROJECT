@@ -31,4 +31,21 @@ resources:
   kind: Peer
   path: github.com/itsthatdude/k8s-glb-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: antware.xyz
+  group: glb
+  kind: Frontend
+  path: github.com/itsthatdude/k8s-glb-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: antware.xyz
+  group: glb
+  kind: Backend
+  path: github.com/itsthatdude/k8s-glb-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"
