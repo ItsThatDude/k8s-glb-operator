@@ -161,8 +161,6 @@ func (w *HAProxyMonitor) Start(ctx context.Context) error {
 }
 
 func (w *HAProxyMonitor) scrapeMetrics(target ScrapeTarget) error {
-	log := logf.FromContext(context.Background())
-	log.Info("Scraping HAProxy health metrics", "target", target.Name)
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 
 	u := &url.URL{

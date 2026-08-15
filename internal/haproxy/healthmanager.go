@@ -1,10 +1,13 @@
 package haproxy
 
 import (
+	"context"
+
 	"github.com/itsthatdude/k8s-glb-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type HealthManager struct {
@@ -25,6 +28,9 @@ func (m *HealthManager) Update(frontend types.NamespacedName, endpoints []Endpoi
 	if !changed {
 		return
 	}
+
+	log := logf.FromContext(context.Background())
+	log.Info("Health state has changed", "namespace", frontend.Namespace, "name", frontend.Name)
 
 	select {
 	case m.events <- event.GenericEvent{
