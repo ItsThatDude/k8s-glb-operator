@@ -149,6 +149,7 @@ func (r *FrontendReconciler) ReconcileService(ctx context.Context, req ctrl.Requ
 		endpointHealth := r.HealthCache.Get(req.NamespacedName)
 		epsEndpoints := make([]discoveryv1.Endpoint, 0, len(endpointHealth))
 		for _, ep := range endpointHealth {
+			log.Info("adding endpoint to endpointslice", "ipAddress", ep.IPAddress, "healthy", ep.Healthy)
 			ready := ep.Healthy
 			epsEndpoints = append(epsEndpoints, discoveryv1.Endpoint{
 				Addresses: []string{ep.IPAddress},

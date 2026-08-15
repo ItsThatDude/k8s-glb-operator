@@ -2,7 +2,9 @@ package haproxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -57,6 +59,7 @@ type HAProxyMonitor struct {
 	metricsPort int32
 	metricsPath string
 	interval    time.Duration
+	httpClient  *http.Client
 }
 
 func NewHAProxyMonitor(
@@ -86,6 +89,7 @@ func NewHAProxyMonitor(
 		metricsPort:    metricsPort,
 		metricsPath:    metricsPath,
 		interval:       interval,
+		httpClient:     &http.Client{Timeout: 5 * time.Second},
 	}, nil
 }
 
@@ -161,15 +165,13 @@ func (w *HAProxyMonitor) Start(ctx context.Context) error {
 }
 
 func (w *HAProxyMonitor) scrapeMetrics(target ScrapeTarget) error {
-	httpClient := &http.Client{Timeout: 5 * time.Second}
-
 	u := &url.URL{
 		Scheme: "http",
 		Host:   net.JoinHostPort(target.IP, strconv.Itoa(int(w.metricsPort))),
 		Path:   "/" + strings.TrimPrefix(w.metricsPath, "/"),
 	}
 
-	resp, err := httpClient.Get(u.String())
+	resp, err := w.httpClient.Get(u.String())
 	if err != nil {
 		return err
 	}
@@ -185,41 +187,48 @@ func (w *HAProxyMonitor) scrapeMetrics(target ScrapeTarget) error {
 	for {
 		var mf dto.MetricFamily
 		if err := decoder.Decode(&mf); err != nil {
-			if err.Error() == "EOF" {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return err
 		}
 
-		if mf.GetName() == "haproxy_backend_agg_server_status" {
-			for _, metric := range mf.Metric {
-				var state string
-				var backendName string
+		if mf.GetName() != "haproxy_backend_agg_server_status" {
+			continue
+		}
 
-				for _, lp := range metric.GetLabel() {
-					if lp.GetName() == "state" {
-						state = lp.GetValue()
-					}
-					if lp.GetName() == "proxy" || lp.GetName() == "backend" {
-						backendName = lp.GetValue()
-					}
+		for _, metric := range mf.Metric {
+			var state string
+			var backendName string
+
+			for _, lp := range metric.GetLabel() {
+				switch lp.GetName() {
+				case "state":
+					state = lp.GetValue()
+				case "proxy":
+					backendName = lp.GetValue()
 				}
-
-				if state != "UP" {
-					continue
-				}
-
-				isHealthy := metric.GetGauge().GetValue() > 0
-
-				w.stateMu.Lock()
-				if _, exists := w.endpointStates[backendName]; !exists {
-					w.endpointStates[backendName] = make(map[types.UID]bool)
-				}
-				w.endpointStates[backendName][target.UID] = isHealthy
-				w.stateMu.Unlock()
 			}
+
+			if state != "UP" {
+				continue
+			}
+
+			g := metric.GetGauge()
+			if g == nil {
+				continue
+			}
+			isHealthy := g.GetValue() > 0
+
+			w.stateMu.Lock()
+			if _, exists := w.endpointStates[backendName]; !exists {
+				w.endpointStates[backendName] = make(map[types.UID]bool)
+			}
+			w.endpointStates[backendName][target.UID] = isHealthy
+			w.stateMu.Unlock()
 		}
 	}
+
 	return nil
 }
 
@@ -235,20 +244,20 @@ func (w *HAProxyMonitor) updateHealthManager(ctx context.Context) error {
 	}
 
 	w.stateMu.RLock()
-	consolidatedMetrics := make(map[string]map[types.UID]bool)
+	consolidated := make(map[string]map[types.UID]bool, len(w.endpointStates))
 	for backendName, backendMap := range w.endpointStates {
 		for uid, isUp := range backendMap {
-			if _, exists := consolidatedMetrics[backendName]; !exists {
-				consolidatedMetrics[backendName] = make(map[types.UID]bool)
+			if _, exists := consolidated[backendName]; !exists {
+				consolidated[backendName] = make(map[types.UID]bool)
 			}
-			consolidatedMetrics[backendName][uid] = consolidatedMetrics[backendName][uid] || isUp
+			consolidated[backendName][uid] = consolidated[backendName][uid] || isUp
 		}
 	}
 
 	frontendEndpointStates := make(map[types.NamespacedName][]Endpoint)
 	for _, backendCR := range backendList.Items {
 		backendName := backendCR.Name
-		uidStates, dataExists := consolidatedMetrics[backendName]
+		uidStates, dataExists := consolidated[backendName]
 		if !dataExists {
 			continue
 		}
@@ -324,7 +333,9 @@ func (w *HAProxyMonitor) onUpdate(ctx context.Context, oldPod, newPod *corev1.Po
 
 	w.stateMu.Lock()
 	defer w.stateMu.Unlock()
-	w.pods[oldPod.UID] = newPod
+
+	delete(w.pods, oldPod.UID)
+	w.pods[newPod.UID] = newPod
 }
 
 func (w *HAProxyMonitor) onDelete(ctx context.Context, pod *corev1.Pod) {
@@ -332,5 +343,13 @@ func (w *HAProxyMonitor) onDelete(ctx context.Context, pod *corev1.Pod) {
 
 	w.stateMu.Lock()
 	defer w.stateMu.Unlock()
+
 	delete(w.pods, pod.UID)
+
+	for backend, m := range w.endpointStates {
+		delete(m, pod.UID)
+		if len(m) == 0 {
+			delete(w.endpointStates, backend)
+		}
+	}
 }

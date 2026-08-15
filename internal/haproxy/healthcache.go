@@ -43,30 +43,30 @@ func (c *HealthCache) GetHealthy(frontend types.NamespacedName) []Endpoint {
 	return healthy
 }
 
-func (c *HealthCache) Update(frontend types.NamespacedName, endpoints []Endpoint) bool {
+func (c *HealthCache) Update(frontend types.NamespacedName, updatedEndpoints []Endpoint) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	val, ok := c.endpoints[frontend]
+	existingFeEndpoints, ok := c.endpoints[frontend]
 	if !ok {
-		c.endpoints[frontend] = endpoints
+		c.endpoints[frontend] = updatedEndpoints
 		return true
 	}
 
-	if len(val) != len(endpoints) {
-		c.endpoints[frontend] = endpoints
+	if len(existingFeEndpoints) != len(updatedEndpoints) {
+		c.endpoints[frontend] = updatedEndpoints
 		return true
 	}
 
-	existingMap := make(map[string]bool, len(val))
-	for _, ep := range val {
+	existingMap := make(map[string]bool, len(existingFeEndpoints))
+	for _, ep := range existingFeEndpoints {
 		existingMap[ep.IPAddress] = ep.Healthy
 	}
 
-	for _, ep := range endpoints {
+	for _, ep := range updatedEndpoints {
 		healthy, exists := existingMap[ep.IPAddress]
 		if !exists || healthy != ep.Healthy {
-			c.endpoints[frontend] = append([]Endpoint(nil), endpoints...)
+			c.endpoints[frontend] = updatedEndpoints
 			return true
 		}
 	}
