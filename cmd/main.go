@@ -241,7 +241,7 @@ func main() {
 	healthEventsChan := make(chan event.GenericEvent)
 	healthMgr := haproxy.NewHealthManager(healthCache, healthEventsChan)
 	monitorInterval, _ := time.ParseDuration("5s")
-	haproxyMonitor, err := haproxy.NewHAProxyMonitor(mgr, healthMgr, watchNamespace, 9095, "/", monitorInterval)
+	haproxyMonitor, err := haproxy.NewHAProxyMonitor(mgr, healthMgr, watchNamespace, 8405, "/", monitorInterval)
 	if err != nil {
 		setupLog.Error(err, "unable to create the backend health watcher")
 		os.Exit(1)
@@ -260,8 +260,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&controller.FrontendReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		HealthCache: healthCache,
 	}).SetupWithManager(mgr, healthEventsChan); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "frontend")
 		os.Exit(1)

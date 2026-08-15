@@ -39,7 +39,7 @@ type GlobalLoadBalancerSpec struct {
 	Replicas int32 `json:"replicas,omitempty"`
 
 	// +optional
-	// +kubebuilder:default="haproxy:latest"
+	// +kubebuilder:default="itsthatdood/k8s-glb-haproxy:latest"
 	Image string `json:"image,omitempty"`
 
 	// +optional
@@ -87,6 +87,7 @@ type GlobalLoadBalancerFrontendStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName=glb
 // +kubebuilder:subresource:status
 
 // GlobalLoadBalancer is the Schema for the globalloadbalancers API

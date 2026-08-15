@@ -11,6 +11,8 @@ spec:
     kind: GlobalLoadBalancer
     listKind: GlobalLoadBalancerList
     plural: globalloadbalancers
+    shortNames:
+    - glb
     singular: globalloadbalancer
   scope: Namespaced
   versions:
@@ -90,7 +92,7 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               image:
-                default: haproxy:latest
+                default: itsthatdood/k8s-glb-haproxy:latest
                 type: string
               peers:
                 properties:

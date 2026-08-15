@@ -8,6 +8,14 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - services
   verbs:
   - create
@@ -32,7 +40,19 @@ rules:
   - patch
   - update
 - apiGroups:
-  - discovery
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - discovery.k8s.io
   resources:
   - endpointslices
   verbs:
@@ -44,13 +64,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - discovery
+  - discovery.k8s.io
   resources:
   - endpointslices/finalizers
   verbs:
   - update
 - apiGroups:
-  - discovery
+  - discovery.k8s.io
   resources:
   - endpointslices/restricted
   verbs:
@@ -59,7 +79,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - discovery
+  - discovery.k8s.io
   resources:
   - endpointslices/status
   verbs:
@@ -69,6 +89,7 @@ rules:
 - apiGroups:
   - glb.antware.xyz
   resources:
+  - backends
   - frontends
   - globalloadbalancers
   verbs:
@@ -82,6 +103,7 @@ rules:
 - apiGroups:
   - glb.antware.xyz
   resources:
+  - backends/finalizers
   - frontends/finalizers
   - globalloadbalancers/finalizers
   verbs:
@@ -89,6 +111,7 @@ rules:
 - apiGroups:
   - glb.antware.xyz
   resources:
+  - backends/status
   - frontends/status
   - globalloadbalancers/status
   verbs:

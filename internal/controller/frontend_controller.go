@@ -41,21 +41,27 @@ import (
 type FrontendReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
-	healthCache *haproxy.HealthCache
+	HealthCache *haproxy.HealthCache
 }
 
 // +kubebuilder:rbac:groups=glb.antware.xyz,namespace=k8s-glb-operator-system,resources=frontends,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=glb.antware.xyz,namespace=k8s-glb-operator-system,resources=frontends/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=glb.antware.xyz,namespace=k8s-glb-operator-system,resources=frontends/finalizers,verbs=update
 
+// +kubebuilder:rbac:groups=glb.antware.xyz,namespace=k8s-glb-operator-system,resources=backends,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=glb.antware.xyz,namespace=k8s-glb-operator-system,resources=backends/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=glb.antware.xyz,namespace=k8s-glb-operator-system,resources=backends/finalizers,verbs=update
+
 // +kubebuilder:rbac:groups=core,namespace=k8s-glb-operator-system,resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,namespace=k8s-glb-operator-system,resources=services/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,namespace=k8s-glb-operator-system,resources=services/finalizers,verbs=update
 
-// +kubebuilder:rbac:groups=discovery,namespace=k8s-glb-operator-system,resources=endpointslices,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=discovery,namespace=k8s-glb-operator-system,resources=endpointslices/restricted,verbs=create;update;patch;delete
-// +kubebuilder:rbac:groups=discovery,namespace=k8s-glb-operator-system,resources=endpointslices/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=discovery,namespace=k8s-glb-operator-system,resources=endpointslices/finalizers,verbs=update
+// +kubebuilder:rbac:groups=discovery.k8s.io,namespace=k8s-glb-operator-system,resources=endpointslices,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=discovery.k8s.io,namespace=k8s-glb-operator-system,resources=endpointslices/restricted,verbs=create;update;patch;delete
+// +kubebuilder:rbac:groups=discovery.k8s.io,namespace=k8s-glb-operator-system,resources=endpointslices/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=discovery.k8s.io,namespace=k8s-glb-operator-system,resources=endpointslices/finalizers,verbs=update
+
+// +kubebuilder:rbac:groups=core,namespace=k8s-glb-operator-system,resources=pods,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -83,6 +89,9 @@ func (r *FrontendReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 }
 
 func (r *FrontendReconciler) ReconcileService(ctx context.Context, req ctrl.Request, frontend *glbv1alpha1.Frontend) error {
+	log := logf.FromContext(ctx)
+	log.Info("Reconciling Frontend Services")
+
 	if frontend.Status.Port == nil {
 		return nil
 	}
@@ -137,7 +146,7 @@ func (r *FrontendReconciler) ReconcileService(ctx context.Context, req ctrl.Requ
 		}
 		es.AddressType = discoveryv1.AddressTypeIPv4
 
-		endpointHealth := r.healthCache.Get(req.NamespacedName)
+		endpointHealth := r.HealthCache.Get(req.NamespacedName)
 		epsEndpoints := make([]discoveryv1.Endpoint, 0, len(endpointHealth))
 		for _, ep := range endpointHealth {
 			ready := ep.Healthy

@@ -23,8 +23,12 @@ const (
 	haproxyRunPath       = "/var/run/haproxy"
 	haproxyRunVolumeName = "haproxy-run"
 
-	haproxyConfigPath       = "/usr/local/etc/haproxy"
+	haproxyConfigPath       = "/etc/haproxy"
 	haproxyConfigVolumeName = "haproxy-config"
+
+	haproxyConfigMapVolumeName = "haproxy-static-config"
+	haproxyConfigMapName       = "haproxy-config"
+	haproxyConfigMapPath       = "/etc/haproxy/static"
 )
 
 var haproxyLabels = map[string]string{
@@ -32,7 +36,7 @@ var haproxyLabels = map[string]string{
 	nameLabel:      "global-load-balancer",
 }
 
-func (r *GlobalLoadBalancerReconciler) EnsureHAProxyStatefulSet(ctx context.Context, cluster *v1alpha1.GlobalLoadBalancer) (bool, error) {
+func (r *GlobalLoadBalancerReconciler) EnsureHAProxyStatefulSet(ctx context.Context, cluster *v1alpha1.GlobalLoadBalancer) error {
 	log := logf.FromContext(ctx)
 	deploymentName := fmt.Sprintf("%s-haproxy", cluster.Name)
 
@@ -45,21 +49,18 @@ func (r *GlobalLoadBalancerReconciler) EnsureHAProxyStatefulSet(ctx context.Cont
 		},
 	}
 
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		if err := controllerutil.SetControllerReference(cluster, deployment, r.Scheme); err != nil {
-			return err
-		}
-
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
 		deployment.ObjectMeta = metav1.ObjectMeta{
-			Name:            deploymentName,
-			Namespace:       cluster.Namespace,
-			OwnerReferences: []metav1.OwnerReference{{}},
+			Name:      deploymentName,
+			Namespace: cluster.Namespace,
 			Labels: map[string]string{
 				componentLabel: haproxyLabels[componentLabel],
 				nameLabel:      haproxyLabels[nameLabel],
 				versionLabel:   version.Version,
 			},
 		}
+
+		deployment.Spec.Replicas = &cluster.Spec.Replicas
 
 		configVolSize := resource.MustParse("100Mi")
 		runVolSize := resource.MustParse("50Mi")
@@ -76,47 +77,64 @@ func (r *GlobalLoadBalancerReconciler) EnsureHAProxyStatefulSet(ctx context.Cont
 				SecurityContext: &corev1.PodSecurityContext{
 					RunAsNonRoot: ptr.To(true),
 				},
-				InitContainers: []corev1.Container{
-					{
-						Name:    "wait-for-config",
-						Image:   r.images.WaitForConfig,
-						Command: []string{"/usr/local/bin/wait-for-config.sh"},
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      haproxyConfigVolumeName,
-								MountPath: haproxyConfigPath,
-								ReadOnly:  true,
-							},
-						},
-					},
-				},
 				Containers: []corev1.Container{
 					{
 						Name:  "haproxy",
-						Image: r.images.HAProxy,
-						Args: func() []string {
-							args := []string{
-								"-W",
-								"-f", "/etc/haproxy/haproxy.cfg",
-								"-f", "/etc/haproxy/peers.cfg",
-								"-f", "/etc/haproxy/maps",
-								"-f", "/etc/haproxy/lists",
-								"-f", "/etc/haproxy/frontends",
-								"-f", "/etc/haproxy/backends",
-								"-p", "/var/run/haproxy/haproxy.pid",
-							}
-							return args
-						}(),
+						Image: cluster.Spec.Image,
+						Args: []string{
+							"-W",
+							"-f", "/etc/haproxy/static/$(POD_NAME).cfg",
+							"-p", "/var/run/haproxy/haproxy.pid",
+						},
+						Env: []corev1.EnvVar{
+							{
+								Name: "POD_NAME",
+								ValueFrom: &corev1.EnvVarSource{
+									FieldRef: &corev1.ObjectFieldSelector{
+										FieldPath: "metadata.name",
+									},
+								},
+							},
+						},
+						Ports: []corev1.ContainerPort{
+							{
+								Name:          "stats",
+								Protocol:      "TCP",
+								ContainerPort: 8404,
+							},
+							{
+								Name:          "metrics",
+								Protocol:      "TCP",
+								ContainerPort: 8405,
+							},
+						},
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      haproxyConfigVolumeName,
 								MountPath: haproxyConfigPath,
+								ReadOnly:  false,
+							},
+							{
+								Name:      haproxyConfigMapVolumeName,
+								MountPath: haproxyConfigMapPath,
 								ReadOnly:  true,
 							},
 							{
 								Name:      haproxyRunVolumeName,
 								MountPath: haproxyRunPath,
 								ReadOnly:  false,
+							},
+						},
+						SecurityContext: &corev1.SecurityContext{
+							AllowPrivilegeEscalation: ptr.To(false),
+							RunAsNonRoot:             ptr.To(true),
+							Capabilities: &corev1.Capabilities{
+								Drop: []corev1.Capability{
+									"ALL",
+								},
+							},
+							SeccompProfile: &corev1.SeccompProfile{
+								Type: corev1.SeccompProfileTypeRuntimeDefault,
 							},
 						},
 					},
@@ -127,6 +145,16 @@ func (r *GlobalLoadBalancerReconciler) EnsureHAProxyStatefulSet(ctx context.Cont
 						VolumeSource: corev1.VolumeSource{
 							EmptyDir: &corev1.EmptyDirVolumeSource{
 								SizeLimit: &configVolSize,
+							},
+						},
+					},
+					{
+						Name: haproxyConfigMapVolumeName,
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: fmt.Sprintf("%s-%s", cluster.Name, haproxyConfigMapName),
+								},
 							},
 						},
 					},
@@ -147,14 +175,18 @@ func (r *GlobalLoadBalancerReconciler) EnsureHAProxyStatefulSet(ctx context.Cont
 			deployment.Spec.Selector = &metav1.LabelSelector{
 				MatchLabels: haproxyLabels,
 			}
+
+			if err := controllerutil.SetControllerReference(cluster, deployment, r.Scheme); err != nil {
+				return err
+			}
 		}
 
 		return nil
 	})
 
-	if err != nil || result != controllerutil.OperationResultNone {
-		return true, err
+	if err != nil {
+		return err
 	}
 
-	return false, nil
+	return nil
 }

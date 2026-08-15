@@ -42,15 +42,15 @@ type DeploymentImages struct {
 // GlobalLoadBalancerReconciler reconciles a GlobalLoadBalancer object
 type GlobalLoadBalancerReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-
-	images       DeploymentImages
+	Scheme       *runtime.Scheme
 	StartingPort int32
 }
 
 // +kubebuilder:rbac:groups=glb.antware.xyz,namespace=k8s-glb-operator-system,resources=globalloadbalancers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=glb.antware.xyz,namespace=k8s-glb-operator-system,resources=globalloadbalancers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=glb.antware.xyz,namespace=k8s-glb-operator-system,resources=globalloadbalancers/finalizers,verbs=update
+
+// +kubebuilder:rbac:groups=apps,namespace=k8s-glb-operator-system,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *GlobalLoadBalancerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
@@ -61,8 +61,7 @@ func (r *GlobalLoadBalancerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	requeue, err := r.EnsureHAProxyStatefulSet(ctx, loadBalancer)
-	if err != nil || requeue {
+	if err := r.EnsureHAProxyStatefulSet(ctx, loadBalancer); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -71,34 +70,80 @@ func (r *GlobalLoadBalancerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if err := r.ReconcileConfig(ctx, loadBalancer); err != nil {
-
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *GlobalLoadBalancerReconciler) ReconcileFrontends(ctx context.Context, loadBalancer *glbv1alpha1.GlobalLoadBalancer) error {
-	log := logf.FromContext(ctx)
-
+func (r *GlobalLoadBalancerReconciler) getFrontends(ctx context.Context, loadBalancer *glbv1alpha1.GlobalLoadBalancer, onlyOwned bool) ([]glbv1alpha1.Frontend, error) {
 	selector, err := metav1.LabelSelectorAsSelector(&loadBalancer.Spec.FrontendSelector)
 	if err != nil {
-		return fmt.Errorf("invalid backend selector on GlobalLoadBalancer: %w", err)
+		return make([]glbv1alpha1.Frontend, 0), fmt.Errorf("invalid backend selector on GlobalLoadBalancer: %w", err)
 	}
 
 	frontends := &glbv1alpha1.FrontendList{}
 	if err := r.List(ctx, frontends, &client.ListOptions{
 		LabelSelector: selector,
 	}); err != nil {
+		return make([]glbv1alpha1.Frontend, 0), err
+	}
+
+	var filtered []glbv1alpha1.Frontend
+
+	for _, frontend := range frontends.Items {
+		if onlyOwned && frontend.Status.LoadBalancer == nil {
+			continue
+		}
+		if frontend.Status.LoadBalancer == nil || (frontend.Status.LoadBalancer.Namespace == loadBalancer.Namespace &&
+			frontend.Status.LoadBalancer.Name == loadBalancer.Name) {
+			filtered = append(filtered, frontend)
+		}
+	}
+
+	return filtered, nil
+}
+
+func (r *GlobalLoadBalancerReconciler) getBackends(ctx context.Context, frontends []glbv1alpha1.Frontend) (map[string][]glbv1alpha1.Backend, error) {
+	backendMap := make(map[string][]glbv1alpha1.Backend)
+
+	for _, frontend := range frontends {
+		selector, err := metav1.LabelSelectorAsSelector(&frontend.Spec.BackendSelector)
+		if err != nil {
+			return backendMap, fmt.Errorf("invalid backend selector on GlobalLoadBalancer: %w", err)
+		}
+
+		backends := &glbv1alpha1.BackendList{}
+		if err := r.List(ctx, backends, &client.ListOptions{
+			LabelSelector: selector,
+		}); err != nil {
+			return backendMap, err
+		}
+
+		backendMap[frontend.Name] = backends.Items
+	}
+
+	return backendMap, nil
+}
+
+func (r *GlobalLoadBalancerReconciler) ReconcileFrontends(ctx context.Context, loadBalancer *glbv1alpha1.GlobalLoadBalancer) error {
+	log := logf.FromContext(ctx)
+	log.Info("Reconciling Load Balancer frontends", "namespace", loadBalancer.Namespace, "name", loadBalancer.Name)
+
+	frontends, err := r.getFrontends(ctx, loadBalancer, false)
+	if err != nil {
 		return err
 	}
 
 	nextPort := r.StartingPort
 
-	if len(frontends.Items) > 0 {
-		nextPort = GetNextPort(frontends.Items, r.StartingPort)
+	if len(frontends) > 0 {
+		nextPort = GetNextPort(frontends, r.StartingPort)
 	}
 
-	for _, frontend := range frontends.Items {
+	log.Info(fmt.Sprintf("The next available frontend port is %d", nextPort))
+
+	for _, frontend := range frontends {
 		updated := false
 		if frontend.Status.LoadBalancer == nil {
 			frontend.Status.LoadBalancer = &glbv1alpha1.LoadBalancerReference{
@@ -119,39 +164,52 @@ func (r *GlobalLoadBalancerReconciler) ReconcileFrontends(ctx context.Context, l
 				continue
 			}
 		}
-		nextPort = GetNextPort(frontends.Items, r.StartingPort)
+		nextPort = GetNextPort(frontends, r.StartingPort)
 	}
 
 	return nil
 }
 
 func (r *GlobalLoadBalancerReconciler) ReconcileConfig(ctx context.Context, loadBalancer *glbv1alpha1.GlobalLoadBalancer) error {
+	log := logf.FromContext(ctx)
+
+	log.Info("Reconciling HAProxy config", "loadbalancer", loadBalancer.Name)
+
 	configBuilder := haproxy.ConfigBuilder{}
 
-	configMap, err := configBuilder.BuildConfig(loadBalancer)
+	frontends, err := r.getFrontends(ctx, loadBalancer, false)
 	if err != nil {
 		return err
 	}
 
-	for podName, config := range configMap {
-		cfgMap := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      fmt.Sprintf("%s-config", podName),
-				Namespace: loadBalancer.Namespace,
-			},
+	backends, err := r.getBackends(ctx, frontends)
+	if err != nil {
+		return err
+	}
+
+	configMap, err := configBuilder.BuildConfig(loadBalancer, frontends, backends)
+	if err != nil {
+		return err
+	}
+
+	cfgMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-%s", loadBalancer.Name, haproxyConfigMapName),
+			Namespace: loadBalancer.Namespace,
+		},
+		Data: make(map[string]string),
+	}
+
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, cfgMap, func() error {
+		for podName, config := range configMap {
+			key := fmt.Sprintf("%s.cfg", podName)
+			cfgMap.Data[key] = config
 		}
+		return nil
+	})
 
-		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, cfgMap, func() error {
-			cfgMap.Data = map[string]string{
-				"haproxy.cfg": config,
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			return err
-		}
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -168,21 +226,20 @@ func (r *GlobalLoadBalancerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		Complete(r)
 }
 
-func GetNextPort(items []glbv1alpha1.Frontend, minPort int32) int32 {
-	if len(items) == 0 {
+func GetNextPort(frontends []glbv1alpha1.Frontend, minPort int32) int32 {
+	if len(frontends) == 0 {
 		return minPort
 	}
 
-	ports := make([]int32, len(items))
-	for i, item := range items {
-		if item.Status.Port != nil {
-			ports[i] = *item.Status.Port
+	ports := make([]int32, 0)
+	for _, fe := range frontends {
+		if fe.Status.Port != nil {
+			ports = append(ports, *fe.Status.Port)
 		}
 	}
-
 	slices.Sort(ports)
 
-	if ports[0] > minPort {
+	if len(ports) == 0 || ports[0] > minPort {
 		return minPort
 	}
 

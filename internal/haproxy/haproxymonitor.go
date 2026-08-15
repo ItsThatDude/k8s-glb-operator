@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -66,7 +67,7 @@ func NewHAProxyMonitor(
 	metricsPath string,
 	interval time.Duration,
 ) (*HAProxyMonitor, error) {
-	req, err := labels.NewRequirement("app.kubernetes.io/name", selection.In, []string{"glb.antware.xyz"})
+	req, err := labels.NewRequirement("app.kubernetes.io/name", selection.In, []string{"global-load-balancer"})
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +98,9 @@ func (w *HAProxyMonitor) NeedLeaderElection() bool {
 }
 
 func (w *HAProxyMonitor) Start(ctx context.Context) error {
+	log := logf.FromContext(ctx)
+	log.Info("Starting informer for HAProxyMonitor")
+
 	informer, err := w.mgr.GetCache().GetInformer(ctx, &corev1.Pod{})
 	if err != nil {
 		return fmt.Errorf("failed to get pod informer: %w", err)
@@ -149,7 +153,7 @@ func (w *HAProxyMonitor) Start(ctx context.Context) error {
 			wg.Wait()
 
 			if err := w.updateHealthManager(ctx); err != nil {
-				// return err
+				log.Error(err, "failed to update health manager")
 				continue
 			}
 		}
@@ -157,6 +161,8 @@ func (w *HAProxyMonitor) Start(ctx context.Context) error {
 }
 
 func (w *HAProxyMonitor) scrapeMetrics(target ScrapeTarget) error {
+	log := logf.FromContext(context.Background())
+	log.Info("Scraping HAProxy health metrics", "target", target.Name)
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 
 	u := &url.URL{
@@ -175,31 +181,43 @@ func (w *HAProxyMonitor) scrapeMetrics(target ScrapeTarget) error {
 		return fmt.Errorf("unexpected status code %d for %s", resp.StatusCode, u.String())
 	}
 
-	dec := expfmt.NewDecoder(resp.Body, expfmt.NewFormat(expfmt.TypeProtoText))
+	format := expfmt.ResponseFormat(resp.Header)
+	decoder := expfmt.NewDecoder(resp.Body, format)
 
 	for {
 		var mf dto.MetricFamily
-		if err := dec.Decode(&mf); err != nil {
+		if err := decoder.Decode(&mf); err != nil {
 			if err.Error() == "EOF" {
 				break
 			}
 			return err
 		}
 
-		if mf.GetName() == "haproxy_backend_server_up" {
+		if mf.GetName() == "haproxy_backend_agg_server_status" {
 			for _, metric := range mf.Metric {
+				var state string
 				var backendName string
+
 				for _, lp := range metric.GetLabel() {
+					if lp.GetName() == "state" {
+						state = lp.GetValue()
+					}
 					if lp.GetName() == "proxy" || lp.GetName() == "backend" {
 						backendName = lp.GetValue()
 					}
 				}
 
+				if state != "UP" {
+					continue
+				}
+
+				isHealthy := metric.GetGauge().GetValue() > 0
+
 				w.stateMu.Lock()
 				if _, exists := w.endpointStates[backendName]; !exists {
 					w.endpointStates[backendName] = make(map[types.UID]bool)
 				}
-				w.endpointStates[backendName][target.UID] = metric.GetGauge().GetValue() == 1.0
+				w.endpointStates[backendName][target.UID] = isHealthy
 				w.stateMu.Unlock()
 			}
 		}
@@ -209,12 +227,12 @@ func (w *HAProxyMonitor) scrapeMetrics(target ScrapeTarget) error {
 
 func (w *HAProxyMonitor) updateHealthManager(ctx context.Context) error {
 	var backendList v1alpha1.BackendList
-	if err := w.List(ctx, &backendList, client.InNamespace(w.namespace)); err != nil {
+	if err := w.Client.List(ctx, &backendList, client.InNamespace(w.namespace)); err != nil {
 		return fmt.Errorf("failed to list backend CRDs: %w", err)
 	}
 
 	var frontendList v1alpha1.FrontendList
-	if err := w.List(ctx, &frontendList, client.InNamespace(w.namespace)); err != nil {
+	if err := w.Client.List(ctx, &frontendList, client.InNamespace(w.namespace)); err != nil {
 		return fmt.Errorf("failed to list frontend CRDs: %w", err)
 	}
 

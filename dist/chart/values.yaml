@@ -21,7 +21,7 @@ manager:
     ##
     # tag: ""
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
 
   ## Arguments
   ##

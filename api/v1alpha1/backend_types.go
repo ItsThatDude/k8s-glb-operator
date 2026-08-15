@@ -27,6 +27,9 @@ import (
 // BackendSpec defines the desired state of Backend
 type BackendSpec struct {
 	// +required
+	Host string `json:"host"`
+
+	// +required
 	Strategy *LoadBalancingStrategy `json:"strategy"`
 
 	// +optional
@@ -45,10 +48,13 @@ const (
 
 type BackendServerSpec struct {
 	// +required
-	Address *string `json:"address"`
+	Name string `json:"name"`
 
 	// +required
-	Port *int `json:"port"`
+	Address string `json:"address"`
+
+	// +required
+	Port int `json:"port"`
 }
 
 // BackendStatus defines the observed state of Backend.
